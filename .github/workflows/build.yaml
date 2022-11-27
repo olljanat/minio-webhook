@@ -2,7 +2,11 @@ name: Build
 
 on:
   push:
-    branches: ['main']
+    branches:
+      - main
+  release:
+    types:
+      - published
 
 jobs:
   build:
@@ -29,4 +33,5 @@ jobs:
           AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
         run: |
           echo "${AUTH_TOKEN}" | ko login docker.io --username brandond --password-stdin
-          ko build
+          export GITHUB_REF=${GITHUB_REF:-latest}
+          ko build --platform=linux/amd64,linux/arm64,linux/arm/v7 --tags ${GITHUB_REF/refs\/tags\//}
