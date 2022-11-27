@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"sync"
 	"syscall"
 
@@ -19,6 +20,8 @@ import (
 type LogEntry struct {
 	Version        string            `json:"version"`
 	DeploymentID   string            `json:"deploymentid"`
+	Event          string            `json:"event"`
+	Trigger        string            `json:"trigger"`
 	Time           metav1.Time       `json:"time"`
 	API            API               `json:"api"`
 	RemoteHost     string            `json:"remotehost"`
@@ -39,7 +42,7 @@ type API struct {
 	RX              int             `json:"rx"`
 	TX              int             `json:"tx"`
 	TimeToResponse  metav1.Duration `json:"timeToResponse"`
-	TimeToFirstByte metav1.Duration `json:"timeToFirstByte"`
+	TimeToFirstByte metav1.Duration `json:"timeToFirstByte,omitempty"`
 }
 
 // Tags contain extra details on how a request was served
@@ -56,6 +59,7 @@ type Object struct {
 
 var authToken = os.Getenv("MINIO_WEBHOOK_AUTH_TOKEN")
 var port = os.Getenv("MINIO_WEBHOOK_PORT")
+var v4AuthHeaderRegexp = regexp.MustCompile(`AWS4-HMAC-SHA256 Credential=(?P<AccessKeyId>[\w-]+)/(?P<Date>\d{8})/(?P<Region>[\w\-]+)/(?P<Service>[\w\-]+)/aws4_request,\s*SignedHeaders=(?P<SignatureHeaders>[\w\-\;]+),\s*Signature=(?P<Signature>[abcdef0123456789]{64})`)
 
 func main() {
 	var logFile io.WriteCloser
@@ -99,7 +103,7 @@ func main() {
 		switch r.Method {
 		case "POST":
 			entry := &LogEntry{}
-			if os.Getenv("OUTPUT_FORMAT") == "raw" {
+			if os.Getenv("MINIO_WEBHOOK_FORMAT") == "raw" {
 				data, err := ioutil.ReadAll(r.Body)
 				if err != nil {
 					log.Printf("Failed to read log entry: %v", err)
@@ -114,8 +118,26 @@ func main() {
 					log.Printf("Failed to decode log entry: %v", err)
 					return
 				}
+
+				authInfo := make(map[string]string)
+				if headerValue := entry.RequestHeader["Authorization"]; headerValue != "" {
+					match := v4AuthHeaderRegexp.FindStringSubmatch(headerValue)
+					if len(match) > 0 {
+						for i, name := range v4AuthHeaderRegexp.SubexpNames() {
+							if i != 0 && name != "" {
+								authInfo[name] = match[i]
+							}
+						}
+					}
+				}
+
+				accessKeyID := "-"
+				if a, ok := authInfo["AccessKeyId"]; ok {
+					accessKeyID = a
+				}
+
 				logFileMu.Lock()
-				fmt.Fprintf(logFile, "%s %s %s [%s] %s %s/%s %d %d\n", entry.RemoteHost, "-", "-", entry.Time.Time, entry.API.Name, entry.API.Bucket, entry.API.Object, entry.API.StatusCode, entry.API.TX)
+				fmt.Fprintf(logFile, "%s %s %s [%s] %s %s/%s %d %d %d\n", entry.RemoteHost, "-", accessKeyID, entry.Time.Time, entry.API.Name, entry.API.Bucket, entry.API.Object, entry.API.StatusCode, entry.API.TX, entry.API.RX)
 				logFileMu.Unlock()
 			}
 		default:
