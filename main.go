@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -87,6 +88,8 @@ func main() {
 		port = "8080"
 	}
 
+	log.Printf("Listening on port %s", port)
+
 	err = http.ListenAndServe(":"+port, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if authToken != "" {
 			if authToken != r.Header.Get("Authorization") {
@@ -96,14 +99,25 @@ func main() {
 		switch r.Method {
 		case "POST":
 			entry := &LogEntry{}
-			decoder := json.NewDecoderCaseSensitivePreserveInts(r.Body)
-			if err := decoder.Decode(entry); err != nil {
-				log.Printf("Failed to decode log entry: %v", err)
-				return
+			if os.Getenv("OUTPUT_FORMAT") == "raw" {
+				data, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					log.Printf("Failed to read log entry: %v", err)
+					return
+				}
+				logFileMu.Lock()
+				fmt.Fprintf(logFile, "%s\n", string(data))
+				logFileMu.Unlock()
+			} else {
+				decoder := json.NewDecoderCaseSensitivePreserveInts(r.Body)
+				if err := decoder.Decode(entry); err != nil {
+					log.Printf("Failed to decode log entry: %v", err)
+					return
+				}
+				logFileMu.Lock()
+				fmt.Fprintf(logFile, "%s %s %s [%s] %s %s/%s %d %d\n", entry.RemoteHost, "-", "-", entry.Time.Time, entry.API.Name, entry.API.Bucket, entry.API.Object, entry.API.StatusCode, entry.API.TX)
+				logFileMu.Unlock()
 			}
-			logFileMu.Lock()
-			fmt.Fprintf(logFile, "%s %s %s [%s] \"%s %s/%s HTTP/1.1\" %d %d\n", entry.RemoteHost, "-", "-", entry.Time.Time.Format("2/Jan/2006:15:04:05 -0700"), entry.API.Name, entry.API.Bucket, entry.API.Object, entry.API.StatusCode, entry.API.TX)
-			logFileMu.Unlock()
 		default:
 		}
 	}))
