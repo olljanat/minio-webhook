@@ -147,9 +147,9 @@ func main() {
 				}
 
 				logFileMu.Lock()
-				fmt.Fprintf(logFile, "%s [%s] %s %s %s %s %s %d %s %d %d %d %q %q %s %s\n",
+				fmt.Fprintf(logFile, "%s [%s] %s %s %s %s %s %d %d %d %d %q %q %s %s\n",
 					entry.API.Bucket, entry.Time.Format("02/Jan/2006:15:04:05 -0700"), entry.RemoteHost, entry.AccessKeyID(), entry.RequestID, entry.API.Name, entry.API.Object,
-					entry.API.StatusCode, entry.API.Status, entry.API.TX, entry.API.TimeToResponse.Milliseconds(), entry.API.TimeToFirstByte.Milliseconds(),
+					entry.API.StatusCode, entry.API.TX, entry.API.TimeToResponse.Milliseconds(), entry.API.TimeToFirstByte.Milliseconds(),
 					entry.RequestHeader["Referer"], entry.UserAgent, entry.DeploymentID, entry.RequestHeader["X-Forwarded-Host"])
 				logFileMu.Unlock()
 			}
