@@ -16,6 +16,10 @@ import (
 	"sigs.k8s.io/json"
 )
 
+var authToken = os.Getenv("MINIO_WEBHOOK_AUTH_TOKEN")
+var port = os.Getenv("MINIO_WEBHOOK_PORT")
+var v5AuthHeaderRegexp = regexp.MustCompile(`AWS4-HMAC-SHA256 Credential=(?P<AccessKeyId>[\w-]+)/(?P<Date>\d{8})/(?P<Region>[\w\-]+)/(?P<Service>[\w\-]+)/aws4_request,\s*SignedHeaders=(?P<SignatureHeaders>[\w\-\;]+),\s*Signature=(?P<Signature>[a-f0-9]{64})`)
+
 // LogEntry represents a Minio log entry
 type LogEntry struct {
 	Version        string            `json:"version"`
@@ -30,6 +34,7 @@ type LogEntry struct {
 	RequestHeader  map[string]string `json:"requestHeader"`
 	ResponseHeader map[string]string `json:"responseHeader"`
 	Tags           Tags              `json:"tags"`
+	authInfo       map[string]string
 }
 
 // API represents the details of an API call
@@ -57,17 +62,39 @@ type Object struct {
 	Disks  []string `json:"disks"`
 }
 
-var authToken = os.Getenv("MINIO_WEBHOOK_AUTH_TOKEN")
-var port = os.Getenv("MINIO_WEBHOOK_PORT")
-var v4AuthHeaderRegexp = regexp.MustCompile(`AWS4-HMAC-SHA256 Credential=(?P<AccessKeyId>[\w-]+)/(?P<Date>\d{8})/(?P<Region>[\w\-]+)/(?P<Service>[\w\-]+)/aws4_request,\s*SignedHeaders=(?P<SignatureHeaders>[\w\-\;]+),\s*Signature=(?P<Signature>[abcdef0123456789]{64})`)
+// AccessKeyID returns the AccessKeyID used to make the request, if it was authenticated
+func (l *LogEntry) AccessKeyID() string {
+	authInfo := l.getAuthInfo()
+	if a, ok := authInfo["AccessKeyId"]; ok {
+		return a
+	}
+	return "-"
+}
+
+func (l *LogEntry) getAuthInfo() map[string]string {
+	if l.authInfo == nil {
+		l.authInfo = make(map[string]string)
+		if headerValue := l.RequestHeader["Authorization"]; headerValue != "" {
+			match := v5AuthHeaderRegexp.FindStringSubmatch(headerValue)
+			if len(match) > 1 {
+				for i, name := range v5AuthHeaderRegexp.SubexpNames() {
+					if i > 0 && name != "" {
+						l.authInfo[name] = match[i]
+					}
+				}
+			}
+		}
+	}
+	return l.authInfo
+}
 
 func main() {
 	var logFile io.WriteCloser
 	var logFileMu sync.Mutex
 	var err error
 
-	if len(os.Args) == 2 {
-		logFile, err = os.OpenFile(os.Args[1], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+	if len(os.Args) == 3 {
+		logFile, err = os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -78,7 +105,7 @@ func main() {
 			for range sigs {
 				logFileMu.Lock()
 				logFile.Close()
-				logFile, err = os.OpenFile(os.Args[1], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+				logFile, err = os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -119,25 +146,11 @@ func main() {
 					return
 				}
 
-				authInfo := make(map[string]string)
-				if headerValue := entry.RequestHeader["Authorization"]; headerValue != "" {
-					match := v4AuthHeaderRegexp.FindStringSubmatch(headerValue)
-					if len(match) > 0 {
-						for i, name := range v4AuthHeaderRegexp.SubexpNames() {
-							if i != 0 && name != "" {
-								authInfo[name] = match[i]
-							}
-						}
-					}
-				}
-
-				accessKeyID := "-"
-				if a, ok := authInfo["AccessKeyId"]; ok {
-					accessKeyID = a
-				}
-
 				logFileMu.Lock()
-				fmt.Fprintf(logFile, "%s %s %s [%s] %s %s/%s %d %d %d\n", entry.RemoteHost, "-", accessKeyID, entry.Time.Time, entry.API.Name, entry.API.Bucket, entry.API.Object, entry.API.StatusCode, entry.API.TX, entry.API.RX)
+				fmt.Fprintf(logFile, "%s [%s] %s %s %s %s %s %d %s %d %d %d %q %q %s %s\n",
+					entry.API.Bucket, entry.Time.Format("02/Jan/2006:15:04:05 -0700"), entry.RemoteHost, entry.AccessKeyID(), entry.RequestID, entry.API.Name, entry.API.Object,
+					entry.API.StatusCode, entry.API.Status, entry.API.TX, entry.API.TimeToResponse.Milliseconds(), entry.API.TimeToFirstByte.Milliseconds(),
+					entry.RequestHeader["Referer"], entry.UserAgent, entry.DeploymentID, entry.RequestHeader["X-Forwarded-Host"])
 				logFileMu.Unlock()
 			}
 		default:
