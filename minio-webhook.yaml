@@ -1,0 +1,56 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-webhook
+  namespace: minio
+  labels:
+    app: minio-webhook
+spec:
+  replicas: 1
+  revisionHistoryLimit: 0
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: minio-webhook
+  template:
+    metadata:
+      labels:
+        app: minio-webhook
+    spec:
+      containers:
+        - name: minio-webhook
+          image: docker.io/brandond/minio-webhook:v0.2.0
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 256Mi
+            requests:
+              memory: 128Mi
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            - name: MINIO_WEBHOOK_FORMAT
+              value: log
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-log-webhook
+  namespace: minio
+  labels:
+    app: minio-webhook
+spec:
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: minio-webhook
