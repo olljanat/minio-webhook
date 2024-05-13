@@ -146,6 +146,12 @@ func main() {
 					return
 				}
 
+				if os.Getenv("MINIO_WEBHOOK_SKIP_BROWSING") == "true" {
+					if IsBrowsingEvent(entry.API.Name) {
+						return
+					}
+				}
+
 				logFileMu.Lock()
 				fmt.Fprintf(logFile, "%s [%s] %s %s %s %s %s %d %d %d %d %q %q %s %s\n",
 					entry.API.Bucket, entry.Time.Format("02/Jan/2006:15:04:05 -0700"), entry.RemoteHost, entry.AccessKeyID(), entry.RequestID, entry.API.Name, entry.API.Object,
@@ -159,4 +165,49 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func IsBrowsingEvent(api string) bool {
+	switch api {
+	case
+		"AccountInfo",
+		"AssumeRole",
+		"GetBucketEncryption",
+		"GetBucketLifecycle",
+		"GetBucketLocation",
+		"GetBucketObjectLockConfig",
+		"GetBucketPolicy",
+		"GetBucketQuotaConfig",
+		"GetBucketReplicationConfig",
+		"GetBucketTagging",
+		"GetBucketVersioning",
+		"GetConfigKV",
+		"GetGroup",
+		"GetIdentityProviderCfg",
+		"GetObjectLegalHold",
+		"GetObjectRetention",
+		"HeadBucket",
+		"HeadObject",
+		"HelpConfigKV",
+		"InfoCannedPolicy",
+		"KMSAPIs",
+		"KMSListKeys",
+		"KMSMetrics",
+		"KMSStatus",
+		"KMSVersion",
+		"ListBuckets",
+		"ListCannedPolicies",
+		"ListGroups",
+		"ListIdentityProviderCfg",
+		"ListObjectsV2",
+		"ListObjectVersions",
+		"ListServiceAccounts",
+		"ListTier",
+		"ListUsers",
+		"ServerInfo",
+		"SiteReplicationInfo",
+		"TierStats":
+		return true
+	}
+	return false
 }
