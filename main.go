@@ -146,6 +146,11 @@ func main() {
 					return
 				}
 
+				// Do not log MinIO internal operations
+				if entry.API.Bucket == "" || entry.API.Bucket == ".minio.sys" {
+					return
+				}
+
 				if os.Getenv("MINIO_WEBHOOK_SKIP_BROWSING") == "true" {
 					if IsBrowsingEvent(entry.API.Name) {
 						return
@@ -186,6 +191,7 @@ func IsBrowsingEvent(api string) bool {
 		"GetIdentityProviderCfg",
 		"GetObjectLegalHold",
 		"GetObjectRetention",
+		"GetObjectTagging",
 		"HeadBucket",
 		"HeadObject",
 		"HelpConfigKV",
