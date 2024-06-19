@@ -1,9 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 
+	_ "github.com/denisenkom/go-mssqldb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/json"
 )
@@ -119,8 +120,22 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Listening on port %s", port)
+	connString := os.Getenv("MINIO_MSSQL_CONNECTION_STRING")
+	var conn *sql.DB
+	if connString != "" {
+		conn, err = sql.Open("mssql", connString)
+		if err != nil {
+			log.Fatal("Open connection to SQL server failed: ", err.Error())
+		}
+		defer conn.Close()
 
+		err = conn.Ping()
+		if err != nil {
+			log.Fatal("Cannot connect to SQL server: ", err.Error())
+		}
+	}
+
+	log.Printf("Listening on port %s", port)
 	err = http.ListenAndServe(":"+port, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if authToken != "" {
 			if authToken != r.Header.Get("Authorization") {
@@ -131,7 +146,7 @@ func main() {
 		case "POST":
 			entry := &LogEntry{}
 			if os.Getenv("MINIO_WEBHOOK_FORMAT") == "raw" {
-				data, err := ioutil.ReadAll(r.Body)
+				data, err := io.ReadAll(r.Body)
 				if err != nil {
 					log.Printf("Failed to read log entry: %v", err)
 					return
@@ -154,6 +169,21 @@ func main() {
 				if os.Getenv("MINIO_WEBHOOK_SKIP_BROWSING") == "true" {
 					if IsBrowsingEvent(entry.API.Name) {
 						return
+					}
+				}
+
+				if os.Getenv("MINIO_MSSQL_CONNECTION_STRING") != "" {
+					if entry.API.Name == "PutObject" || entry.API.Name == "CompleteMultipartUpload" {
+						_, err = conn.Exec("SaveObject @Bucket=?,@Path=?,@AccessKeyID=?,@RemoteHost=?;", entry.API.Bucket, entry.API.Object, entry.AccessKeyID(), entry.RemoteHost)
+						if err != nil {
+							log.Printf("Stored procedure SaveObject failed: %s", err)
+						}
+					}
+					if entry.API.Name == "DeleteObject" {
+						_, err = conn.Exec("DeleteObject @Bucket=?,@Path=?", entry.API.Bucket, entry.API.Object)
+						if err != nil {
+							log.Printf("Stored procedure DeleteObject failed: %s", err)
+						}
 					}
 				}
 
