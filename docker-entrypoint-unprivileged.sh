@@ -65,8 +65,7 @@ else
 		clamav-milter &
 	fi
 
-	# Wait forever (or until canceled)
-	exec tail -f "/dev/null"
+	/minio-webhook
 fi
 
 exit 0

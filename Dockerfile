@@ -6,7 +6,8 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o minio-webhook main.go
 
 # Second stage: setup the runtime container
-FROM scratch
+FROM clamav/clamav:1.2
+COPY /docker-entrypoint-unprivileged.sh /init-unprivileged
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /go/src/minio-webhook/minio-webhook .
-ENTRYPOINT ["/minio-webhook"]
+ENTRYPOINT ["/init-unprivileged"]
