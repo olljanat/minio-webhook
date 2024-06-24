@@ -167,28 +167,25 @@ func main() {
 	var logFileMu sync.Mutex
 	var err error
 
-	if len(os.Args) == 3 {
-		logFile, err = os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
-		if err != nil {
-			log.Fatal(err)
-		}
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGHUP)
-
-		go func() {
-			for range sigs {
-				logFileMu.Lock()
-				logFile.Close()
-				logFile, err = os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
-				if err != nil {
-					log.Fatal(err)
-				}
-				logFileMu.Unlock()
-			}
-		}()
-	} else {
-		logFile = os.Stdout
+	logFile, err = os.OpenFile("/logs/audit.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+	if err != nil {
+		log.Fatal(err)
 	}
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGHUP)
+
+	go func() {
+		for range sigs {
+			logFileMu.Lock()
+			logFile.Close()
+			logFile, err = os.OpenFile("/logs/audit.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+			if err != nil {
+				log.Fatal(err)
+			}
+			logFileMu.Unlock()
+		}
+	}()
+
 	if port == "" {
 		port = "8080"
 	}

@@ -65,7 +65,7 @@ else
 		clamav-milter &
 	fi
 
-	/minio-webhook /logs/audit.log
+	/minio-webhook
 fi
 
 exit 0
