@@ -136,10 +136,11 @@ func scanFile(bucket, object string) {
 	}
 
 	// Scan with ClaimAV
-	cmd := exec.Command("clamdscan", tempFile.Name(), "--remove")
+	cmd := exec.Command("clamdscan", "--no-summary", "--remove", tempFile.Name())
 	if err := cmd.Run(); err != nil {
 		log.Printf("exec.Command failed: %s", err)
 	}
+
 	var tagMap = map[string]string{}
 	if _, err := os.Stat(tempFile.Name()); err == nil {
 		tagMap = map[string]string{
@@ -149,6 +150,7 @@ func scanFile(bucket, object string) {
 		tagMap = map[string]string{
 			"ClamAV": "infected",
 		}
+		log.Printf("WARNING: Infected object found. Bucket: %s Object: %s", bucket, object)
 	}
 	t, err := tags.MapToObjectTags(tagMap)
 	if err != nil {
