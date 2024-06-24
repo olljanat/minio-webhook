@@ -1,18 +1,23 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"regexp"
 	"sync"
 	"syscall"
 
 	_ "github.com/denisenkom/go-mssqldb"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio-go/v7/pkg/tags"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/json"
 )
@@ -87,6 +92,61 @@ func (l *LogEntry) getAuthInfo() map[string]string {
 		}
 	}
 	return l.authInfo
+}
+
+func scanFile(bucket, object string) {
+	endpoint := os.Getenv("MINIO_CLAMAV_ENDPOINT")
+	accessKeyID := os.Getenv("MINIO_CLAMAV_ACCESS_KEY")
+	secretAccessKey := os.Getenv("MINIO_CLAMAV_SECRET")
+	useSSL := true
+
+	// Initialize MinIO client
+	minioClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		log.Printf("Initialize MinIO client failed: %s", err)
+	}
+
+	// Download object to temp file
+	tempFile, err := os.CreateTemp("/tmp", "")
+	if err != nil {
+		log.Printf("os.CreateTemp failed: %s", err)
+	}
+	defer os.Remove(tempFile.Name())
+
+	reader, err := minioClient.GetObject(context.Background(), bucket, object, minio.GetObjectOptions{})
+	if err != nil {
+		log.Printf("minioClient.GetObject failed: %s", err)
+	}
+	defer reader.Close()
+
+	stat, err := reader.Stat()
+	if err != nil {
+		log.Printf("reader.Stat() failed: %s", err)
+	}
+
+	if _, err := io.CopyN(tempFile, reader, stat.Size); err != nil {
+		log.Printf("io.CopyN failed: %s", err)
+	}
+
+	// Scan with ClaimAV
+	cmd := exec.Command("clamdscan", tempFile.Name(), "--remove")
+	if err := cmd.Run(); err != nil {
+		log.Printf("exec.Command failed: %s", err)
+	}
+
+	var tags tags.Tags
+	if _, err := os.Stat(tempFile.Name()); err == nil {
+		tags.Set("ClamAV", "clean")
+	} else {
+		tags.Set("ClamAV", "infected")
+	}
+	err = minioClient.PutObjectTagging(context.Background(), bucket, object, &tags, minio.PutObjectTaggingOptions{})
+	if err != nil {
+		log.Printf("minioClient.PutObjectTagging failed: %s", err)
+	}
 }
 
 func main() {
@@ -178,6 +238,7 @@ func main() {
 						if err != nil {
 							log.Printf("Stored procedure SaveObject failed: %s", err)
 						}
+						go scanFile(entry.API.Bucket, entry.API.Object)
 					}
 					if entry.API.Name == "DeleteObject" {
 						_, err = conn.Exec("DeleteObject @Bucket=?,@Path=?", entry.API.Bucket, entry.API.Object)
