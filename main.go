@@ -229,6 +229,10 @@ func main() {
 				if entry.API.Bucket == "" || entry.API.Bucket == ".minio.sys" {
 					return
 				}
+				// Do not log non-authentication operations (nmap scanning, etc)
+				if entry.AccessKeyID() == "-" {
+					return
+				}
 
 				if os.Getenv("MINIO_WEBHOOK_SKIP_BROWSING") == "true" {
 					if IsBrowsingEvent(entry.API.Name) {
