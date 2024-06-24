@@ -140,14 +140,21 @@ func scanFile(bucket, object string) {
 	if err := cmd.Run(); err != nil {
 		log.Printf("exec.Command failed: %s", err)
 	}
-
-	var tags tags.Tags
+	var tagMap = map[string]string{}
 	if _, err := os.Stat(tempFile.Name()); err == nil {
-		tags.Set("ClamAV", "clean")
+		tagMap = map[string]string{
+			"ClamAV": "clean",
+		}
 	} else {
-		tags.Set("ClamAV", "infected")
+		tagMap = map[string]string{
+			"ClamAV": "infected",
+		}
 	}
-	err = minioClient.PutObjectTagging(context.Background(), bucket, object, &tags, minio.PutObjectTaggingOptions{})
+	t, err := tags.MapToObjectTags(tagMap)
+	if err != nil {
+		log.Printf("tags.MapToObjectTags failed: %s", err)
+	}
+	err = minioClient.PutObjectTagging(context.Background(), bucket, object, t, minio.PutObjectTaggingOptions{})
 	if err != nil {
 		log.Printf("minioClient.PutObjectTagging failed: %s", err)
 	}
