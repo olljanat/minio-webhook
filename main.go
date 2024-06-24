@@ -25,6 +25,9 @@ import (
 
 var authToken = os.Getenv("MINIO_WEBHOOK_AUTH_TOKEN")
 var port = os.Getenv("MINIO_WEBHOOK_PORT")
+var claimAVendpoint = os.Getenv("MINIO_CLAMAV_ENDPOINT")
+var claimAVaccessKeyID = os.Getenv("MINIO_CLAMAV_ACCESS_KEY")
+var claimAVsecretAccessKey = os.Getenv("MINIO_CLAMAV_SECRET")
 var v5AuthHeaderRegexp = regexp.MustCompile(`AWS4-HMAC-SHA256 Credential=(?P<AccessKeyId>[\w-]+)/(?P<Date>\d{8})/(?P<Region>[\w\-]+)/(?P<Service>[\w\-]+)/aws4_request,\s*SignedHeaders=(?P<SignatureHeaders>[\w\-\;]+),\s*Signature=(?P<Signature>[a-f0-9]{64})`)
 
 // LogEntry represents a Minio log entry
@@ -96,16 +99,13 @@ func (l *LogEntry) getAuthInfo() map[string]string {
 }
 
 func scanFile(bucket, object string) {
-	endpoint := os.Getenv("MINIO_CLAMAV_ENDPOINT")
-	accessKeyID := os.Getenv("MINIO_CLAMAV_ACCESS_KEY")
-	secretAccessKey := os.Getenv("MINIO_CLAMAV_SECRET")
 	useSSL := true
 
 	// Initialize MinIO client
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:     credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+	minioClient, err := minio.New(claimAVendpoint, &minio.Options{
+		Creds:     credentials.NewStaticV4(claimAVaccessKeyID, claimAVsecretAccessKey, ""),
 		Secure:    useSSL,
 		Transport: customTransport,
 	})
@@ -240,6 +240,10 @@ func main() {
 				}
 				// Do not log non-authentication operations (nmap scanning, etc)
 				if entry.AccessKeyID() == "-" {
+					return
+				}
+				// Do not log ClamAV tagging done by this tool itselves
+				if entry.AccessKeyID() == claimAVaccessKeyID {
 					return
 				}
 
