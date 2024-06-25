@@ -10,6 +10,7 @@ FROM clamav/clamav:1.2
 RUN chown -R 100001 /var/log/clamav \
     && chown -R 100001 /var/lib/clamav
 COPY /docker-entrypoint-unprivileged.sh /init-unprivileged
+COPY /clamdcheck.sh /usr/local/bin/
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /go/src/minio-webhook/minio-webhook .
 ENTRYPOINT ["/init-unprivileged"]
