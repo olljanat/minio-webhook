@@ -243,6 +243,10 @@ func main() {
 				if entry.AccessKeyID() == claimAVaccessKeyID {
 					return
 				}
+				// Do not log backup replication
+				if entry.AccessKeyID() == "backup" {
+					return
+				}
 
 				if os.Getenv("MINIO_WEBHOOK_SKIP_BROWSING") == "true" {
 					if IsBrowsingEvent(entry.API.Name) {
