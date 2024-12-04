@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o minio-webhook main.go
 
 # Second stage: setup the runtime container
-FROM clamav/clamav:1.2
+FROM clamav/clamav:1.4
 RUN chown -R 100001 /var/log/clamav \
     && chown -R 100001 /var/lib/clamav
 COPY /docker-entrypoint-unprivileged.sh /init-unprivileged
