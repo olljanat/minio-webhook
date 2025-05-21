@@ -113,6 +113,8 @@ func scanFile(bucket, object string) {
 		log.Printf("Initialize MinIO client failed: %s", err)
 	}
 
+	minioClient.SetAppInfo("ClamAVscanner", "1.0")
+
 	// Download object to temp file
 	tempFile, err := os.CreateTemp("/tmp", "")
 	if err != nil {
