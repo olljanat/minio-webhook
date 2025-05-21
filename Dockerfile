@@ -1,5 +1,5 @@
 # First stage: Build static binary
-FROM golang:1.22-alpine as builder
+FROM golang:1.24-alpine as builder
 RUN apk add -U --no-cache ca-certificates
 WORKDIR /go/src/minio-webhook
 COPY . .
